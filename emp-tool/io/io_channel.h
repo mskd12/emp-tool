@@ -3,6 +3,7 @@
 #include "emp-tool/utils/block.h"
 #include "emp-tool/utils/prg.h"
 #include "emp-tool/utils/group.h"
+#include "emp-tool/utils/hash.h"
 #include <memory>
 
 namespace emp {
@@ -10,11 +11,15 @@ template<typename T>
 class IOChannel { public:
 	uint64_t counter = 0;
 	void send_data(const void * data, int nbyte) {
+		if(bool_fast_need_flush)
+			flush_bool_fast();
 		counter +=nbyte;
 		derived().send_data_internal(data, nbyte);
 	}
 
 	void recv_data(void * data, int nbyte) {
+		if(bool_fast_need_flush)
+			flush_bool_fast();
 		derived().recv_data_internal(data, nbyte);
 	}
 
@@ -114,6 +119,54 @@ class IOChannel { public:
 		}
 		if (8*i != length)
 			recv_data(data + 8*i, length - 8*i);
+	}
+
+	bool * bool_buf = nullptr;
+	size_t bool_ptr;
+	const size_t buf_size = NETWORK_BUFFER_SIZE2;
+	bool is_sender;
+	bool bool_fast_need_flush = false;
+	Hash hash;
+	void start_bool_fast(bool _is_sender) {
+		is_sender = _is_sender;
+		if(bool_buf != nullptr)
+		bool_buf = (bool * )(new uint64_t[buf_size/8]);
+		if(is_sender)
+			bool_ptr = 0;
+		else bool_ptr = buf_size;
+	}
+	void send_bool_fast(bool data) {
+		bool_fast_need_flush = true;
+		bool_buf[bool_ptr] = data;
+		bool_ptr++;
+		if(bool_ptr == buf_size) {
+			send_bool_aligned(bool_buf, buf_size);
+			bool_ptr = 0;
+		}
+	}
+	bool recv_bool_fast() {
+		bool_fast_need_flush = true;
+		if(bool_ptr == buf_size) {
+			recv_bool_aligned(bool_buf, buf_size);
+			bool_ptr = 0;
+		}
+		bool res = bool_buf[bool_ptr];
+		bool_ptr++;
+		return res;
+	}
+	void flush_bool_fast() {
+		if(is_sender) {
+			bool data = true;
+			while(bool_ptr!=0)
+				send_bool_fast(data);
+		} else {
+			bool_ptr = buf_size;
+		}
+		bool_fast_need_flush = false;
+	}
+	~IOChannel() {
+		if(bool_buf != nullptr)
+			delete[] bool_buf;
 	}
 
 
