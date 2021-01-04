@@ -45,7 +45,6 @@ void sha2_stateful() {
     std::string filepath = "/usr/local/include/emp-tool/circuits/files/bristol_fashion/sha256.txt";
     emp::BristolFashion cf(filepath.c_str());
     vector<emp::Bit> reverse(512 + 256);
-    vector<emp::Bit> result(256);
     // Invert bits: 0->511; 1->510, ... 511->0
     for (int i=0; i<512; i++)
         reverse[i] = inp.bits[511-i];
@@ -54,9 +53,46 @@ void sha2_stateful() {
     for (int i=0; i<256; i++)
         reverse[i+512] = inp.bits[767-i];
 
+    vector<emp::Bit> result(256);
     cf.compute(result.data(), reverse.data());
 
-    // Invert bits    
+    // Invert bits
+    for (int i=0; i<256; i++)
+        out.bits[i] = result[255-i];
+
+    out.reveal<std::string>();
+}
+
+void modadder256() {
+    emp::Integer inp(256 * 2, 0, emp::ALICE);
+
+    emp::Integer out(256, 0, emp::PUBLIC);
+
+    std::string filepath = "/usr/local/include/emp-tool/circuits/files/bristol_fashion/ModAdd512.txt";
+    emp::BristolFashion cf(filepath.c_str());
+
+    vector<emp::Bit> reverse(512*3);
+    // Invert bits: 0->511; 1->510, ... 511->0
+    for (int i=0; i<256; i++) {
+        reverse[i] = inp.bits[255-i];
+    }
+
+    // Invert bits: 512->512 + 511; ... 1023->512
+    for (int i=0; i<256; i++)
+        reverse[i+512] = inp.bits[(256+255)-i];
+
+    // Invert bits: 1024->512*2 + 511; ... 3*512-1->1024
+    const char* modulus = "1111111111111111111111111111111100000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111";
+    for (int i=0; i<256; i++) {
+        reverse[i+512*2] = (modulus[255-i] == '1');
+    }
+
+    vector<emp::Bit> result(512);
+    cf.compute(result.data(), reverse.data());
+
+    // Invert bits  
+    // 3 2 1 0 
+    // 0a0b0c0d00000
     for (int i=0; i<256; i++)
         out.bits[i] = result[255-i];
 
@@ -64,7 +100,7 @@ void sha2_stateful() {
 }
 
 int main(int argc, char** argv) {
-	emp::setup_plain_prot(true, "sha256St.txt");
-    sha2_stateful();
+	emp::setup_plain_prot(true, "ModAdd256.txt");
+    modadder256();
 	emp::finalize_plain_prot();
 }
